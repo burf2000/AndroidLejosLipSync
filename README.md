@@ -11,3 +11,5 @@ Run the Android app on the device first, then run the Lejos app.
 Plug a motor in to port A in the Ev3
 
 Tap the Android app, and it should speak, and the motor should move!
+
+More to come soon.
