@@ -13,6 +13,7 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.StrictMode;
 import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -42,7 +43,7 @@ import java.nio.charset.Charset;
 import java.util.HashMap;
 import java.util.Locale;
 
-public class MainActivity extends Activity implements TextToSpeech.OnInitListener, TextToSpeech.OnUtteranceCompletedListener {
+public class MainActivity extends Activity implements TextToSpeech.OnInitListener {
 
     // connection to lego
     static final int RECIEVE_PORT = 5678;
@@ -74,6 +75,9 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
     private VisualizerView mVisualizerView;
     private TextView mStatusTextView;
 
+    private String filename = "test2.wav";
+    private static boolean speaking = false;
+
     int a = 0;
 
     //runs without a timer by reposting this handler at the end of the runnable
@@ -88,13 +92,37 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                 try {
                     if((receiveMessage = receiveRead.readLine()) != null)
                     {
-                        System.out.println(receiveMessage);
+                        //System.out.println(receiveMessage);
+                        if (receiveMessage.length() > 1) {
 
-                        sendMessage = ""+a;
-                        pwrite.println(sendMessage);
-                        pwrite.flush();
+                            final String message = receiveMessage;
+
+                            runOnUiThread(new Runnable() {
+
+                                @Override
+                                public void run() {
+                                    if (speaking == false)
+                                    {
+                                        speakWords(message);
+                                    }
+
+                                }
+                            });
+
+                        }
 
                     }
+
+                    sendMessage = ""+a;
+                    pwrite.println(sendMessage);
+                    pwrite.flush();
+
+                    if (pwrite.checkError() == true)
+                    {
+                        Log.d(TAG, "Restarted Server");
+                        startServer();
+                    }
+
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
@@ -158,7 +186,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
 
     public void sendLipSync(int i)
     {
-        a = (int)(i * 0.4);
+        a = i;
     }
 
     private void setupServer() {
@@ -318,7 +346,10 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
 
     private void speakWords(String speech) {
         //implement TTS here
-        if (speech != null && speech.length() > 0) {
+
+        if (speech != null && speech.length() > 0 && speaking == false) {
+
+            speaking = true;
 
             //
             HashMap<String, String> myHashAlarm = new HashMap<String, String>();
@@ -328,7 +359,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
 
             String root = Environment.getExternalStorageDirectory().toString();
 
-            soundFilename = root + "/simon.wav";
+            soundFilename = root + "/" + filename;
             soundFile = new File(soundFilename);
             if (soundFile.exists())
                 soundFile.delete();
@@ -402,9 +433,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
 
     @Override
     public boolean onTouchEvent(MotionEvent e) {
-
-
-        speakWords("Hello everyone and welcome to this LEGO MINDSTORMS and Android Lip sync demo.");
+        welcome();
 
 //        Thread t = new Thread(new Runnable() {
 //            public void run() {
@@ -416,6 +445,11 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         return true;
     }
 
+    public void welcome()
+    {
+        speakWords("Hello and welcome to the Lab area. We love to discuss technology!");
+    }
+
     @Override
     public void onInit(int status) {
 
@@ -423,9 +457,56 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
 
         if (status == TextToSpeech.SUCCESS) {
             myTTS.setLanguage(Locale.UK);
-            myTTS.setOnUtteranceCompletedListener(this);
+            //myTTS.setOnUtteranceCompletedListener(this);
             //myTTS.speak("Hello", TextToSpeech.QUEUE_FLUSH, null);
             //speakWords("Hello and welcome to Android");
+
+
+            myTTS.setOnUtteranceProgressListener(new UtteranceProgressListener()
+            {
+                @Override
+                public void onDone(String utteranceId)
+                {
+                    mMediaPlayer.reset();
+                    mVisualizer.setEnabled(true);
+
+                    soundFilename = Environment.getExternalStorageDirectory() + "/" + filename;
+
+                    try {
+                        mMediaPlayer.setDataSource(soundFilename);
+
+                        mMediaPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+                            @Override
+                            public void onPrepared(MediaPlayer mp) {
+                                mMediaPlayer.start();
+                                speaking = false;
+                            }
+                        });
+                        mMediaPlayer.prepareAsync();
+
+                    } catch (IOException e) {
+                        e.printStackTrace();
+
+                        speaking = false;
+                    }
+
+
+                }
+
+                @Override
+                public void onError(String utteranceId)
+                {
+                    speaking = false;
+                }
+
+                @Override
+                public void onStart(String utteranceId)
+                {
+                    speaking = true;
+                }
+            });
+
+
         } else if (status == TextToSpeech.ERROR) {
             Toast.makeText(this, "Sorry! Text To Speech failed...", Toast.LENGTH_LONG).show();
         }
@@ -433,27 +514,27 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         setupServer();
     }
 
-    @Override
-    public void onUtteranceCompleted(String utteranceId) {
-        mMediaPlayer.reset();
-        mVisualizer.setEnabled(true);
-
-        soundFilename = Environment.getExternalStorageDirectory() + "/simon.wav";
-
-        try {
-            mMediaPlayer.setDataSource(soundFilename);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        mMediaPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
-            @Override
-            public void onPrepared(MediaPlayer mp) {
-                mMediaPlayer.start();
-            }
-        });
-        mMediaPlayer.prepareAsync();
-
-    }
+//    @Override
+//    public void onUtteranceCompleted(String utteranceId) {
+//        mMediaPlayer.reset();
+//        mVisualizer.setEnabled(true);
+//
+//        soundFilename = Environment.getExternalStorageDirectory() + "/simon.wav";
+//
+//        try {
+//            mMediaPlayer.setDataSource(soundFilename);
+//        } catch (IOException e) {
+//            e.printStackTrace();
+//        }
+//
+//        mMediaPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+//            @Override
+//            public void onPrepared(MediaPlayer mp) {
+//                mMediaPlayer.start();
+//            }
+//        });
+//        mMediaPlayer.prepareAsync();
+//
+//    }
 }
 
